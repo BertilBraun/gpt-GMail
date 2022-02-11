@@ -169,8 +169,6 @@ function logic() {
 
     if (!request) return;
 
-    clearInterval(timeout);
-
     const inputField = inputFields.item(0);
 
     const existing = getElementByXpath("//*[text() = 'Gen Email']");
@@ -187,11 +185,10 @@ function logic() {
         response
       );
       inputField.innerHTML = response.replaceAll("\n", "<br>");
-      timeout = setInterval(logic, 1000);
     });
 
     toolBar.appendChild(commitButton);
   }
 }
 
-let timeout = setInterval(logic, 1000);
+setInterval(logic, 1000);
