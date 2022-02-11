@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "package": "browserify js/writer.js > js/bundle.js"
+  },
   "dependencies": {
     "openai": "^2.0.2"
   }
