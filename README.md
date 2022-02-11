@@ -1,4 +1,4 @@
-# GPT3 Email Response Extension
+# GPT3 G-Mail Response Extension
 
 Generates a response to an email using a GPT-3 model. Using the last email in the conversation and a view Bullet Points that you provide which describe the rough content of the email, the model generates a response.
 
@@ -19,5 +19,5 @@ Package via `browserify writer.js > bundle.js` or the included `npm run package`
 # Future
 
 - [ ] Cleanup environment variables and proper modularization.
-- [ ] Use different Templates for different languages.
+- [x] Use different Templates for different languages.
 - [ ] Use different Templates when there was no request.

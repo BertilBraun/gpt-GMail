@@ -1,11 +1,13 @@
 const { Configuration, OpenAIApi } = require("openai");
+const lngDetector = new (require("languagedetect"))();
 
 const configuration = new Configuration({
   apiKey: "YOUR_API_KEY",
 });
 const openai = new OpenAIApi(configuration);
 
-const template = `
+const templates = {
+  english: `
 ###
 
 Hi Bertil,
@@ -21,7 +23,7 @@ George Washington
 
 ----
 
-[Bullet Points]
+[Punkte]
 thanks
 occupied at the moment
 go ahead
@@ -40,57 +42,73 @@ Please let me know if any new situations emerge that require my attention. It is
 Regards,
 Bertil Braun
 
+### 
+`,
+  german: `
 ###
 
-Hi Bertil,
+Hallo Bertil,
 
-I want to invite you to an event we are holding for Steve Welch, our Head of Marketing who is leaving on 12 December. The event will take place between 7 pm – 12 pm on 12 December.
+Ich habe dieser E-Mail fünf Muster meiner Originaldesigns beigefügt. Der sechste Anhang ist eine Liste von Entwürfen, bei denen ich mit anderen Designern zusammengearbeitet habe, einschließlich des Standorts (URL) der Entwürfe im Internet.
 
-Numbers are limited, and guests will be required to RSVP before the event to ensure adequate space and refreshments.
+Vielen Dank für die Erlaubnis, Ihnen Muster zusenden zu dürfen. Ich würde mich freuen, an dem bevorstehenden Wettbewerb teilzunehmen und auch Ihrem Team meine Dienste vorzustellen.
 
-If you would like to attend, RSVP to this email with any dietary requirements. If you cannot attend, we encourage you to send your messages of support for Steve before he leaves to start his new role.
+Bitte benachrichtigen Sie mich, wenn Sie weitere Informationen benötigen.
 
-Regards,
-Mandy Smith
-
-----
-
-[Bullet Points]
-thanks
-will come
-all the best to Steve
-vegetarian
+Mit freundlichen Grüßen,
+George Washington
 
 ----
 
-Hi Mandy,
+[Punkte]
+danke
+im Moment besetzt
+machen Sie weiter
+informieren Sie mich, wenn meine Aufmerksamkeit erforderlich ist
 
-I hope you've had a lovely week. Thank you for inviting me to the event.
+----
 
-I'm occupied with some deadlines at the moment. However, I will be able to attend the event anyway. It has been an honour working with Steve, and I will want to wish him the best.
+Hallo George,
 
-Regarding the dietary requirements, I'm a vegetarian and would like to be able to attend the event.
+ich hoffe, du hattest eine schöne Woche. Vielen Dank für die prompte Zusendung der von mir angeforderten Informationen.
 
-Once again, thank you for reaching out.Also, do contact me if you have any additional questions or need anything else.
+Leider bin ich im Moment mit einigen Terminen beschäftigt. Ich kann das Dokument jedoch überprüfen und vor Ende der Woche zurückschicken. In der Zwischenzeit können Sie mit dem Entwurf für das Projekt fortfahren.
 
-Regards,
+Bitte lassen Sie mich wissen, wenn sich neue Situationen ergeben, die meine Aufmerksamkeit erfordern. Es ist mir eine Ehre, mit Ihnen an diesem Projekt zu arbeiten, und ich hoffe, die Zusammenarbeit mit Ihnen bald wieder aufnehmen zu können.
+
+Mit freundlichen Grüßen,
 Bertil Braun
 
 ### 
-`;
+`,
+};
 
-const buildPrompt = (request, points) => `
-${template}
+const getTemplate = (request) => {
+  const languages = lngDetector.detect(request);
+
+  for (const [lng, probability] of languages) {
+    if (Object.keys(templates).includes(lng)) {
+      return templates[lng];
+    }
+  }
+
+  throw new Error("No template found");
+};
+
+const buildPrompt = (request, points) => {
+  return `
+${getTemplate(request)}
 ${request}
 
 ----
 
-[Bullet Points]
+[Punkte]
 ${points}
 
 ----
 
 `;
+};
 
 const buildEmail = async (request, points) => {
   const response = await openai.createCompletion("text-davinci-001", {
@@ -149,7 +167,6 @@ function logic() {
 
     const request = container.children[0].children[1].children[2];
 
-    console.log(request);
     if (!request) return;
 
     clearInterval(timeout);
@@ -165,7 +182,10 @@ function logic() {
         request.innerText,
         inputField.innerText
       );
-      console.log(response);
+      console.log(
+        buildPrompt(request.innerText, inputField.innerText),
+        response
+      );
       inputField.innerHTML = response.replaceAll("\n", "<br>");
       timeout = setInterval(logic, 1000);
     });

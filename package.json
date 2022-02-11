@@ -3,6 +3,7 @@
     "package": "browserify js/writer.js > js/bundle.js"
   },
   "dependencies": {
+    "languagedetect": "^2.0.0",
     "openai": "^2.0.2"
   }
 }
