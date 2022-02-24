@@ -176,15 +176,24 @@ function logic() {
     const commitButton = createCommitButton();
 
     commitButton.addEventListener("click", async () => {
-      const response = await buildEmail(
-        request.innerText,
-        inputField.innerText
-      );
-      console.log(
-        buildPrompt(request.innerText, inputField.innerText),
-        response
-      );
-      inputField.innerHTML = response.replaceAll("\n", "<br>");
+      commitButton.innerText = "Generating...";
+
+      console.log("Generating email...");
+      console.log(buildPrompt(request.innerText, inputField.innerText));
+
+      try {
+        const response = await buildEmail(
+          request.innerText,
+          inputField.innerText
+        );
+        console.log(response);
+
+        inputField.innerHTML = response.replaceAll("\n", "<br>");
+      } catch (error) {
+        alert(error);
+      }
+
+      commitButton.innerText = "Gen Email";
     });
 
     toolBar.appendChild(commitButton);
