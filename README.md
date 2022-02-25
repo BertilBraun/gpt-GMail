@@ -21,3 +21,5 @@ Package via `browserify writer.js > bundle.js` or the included `npm run package`
 - [ ] Cleanup environment variables and proper modularization.
 - [x] Use different Templates for different languages.
 - [ ] Use different Templates when there was no request.
+- [ ] Detect how friendly or professional the request is and select different Templates based on that.
+- [ ] Calculate how long the response may be, to not exceed the 2049 Token limit.
