@@ -83,43 +83,62 @@ Bertil Braun
 `,
 };
 
-const getTemplate = (request) => {
+const getPrompt = (request, points) => {
+  return `Write a professional, formal mail. The following is the conversation so far:
+  ${request}
+
+
+  Now write a professional sounding formal response containing the following points:
+  ${points}
+  
+  Include a slight imitation of their habits. I.e. If partner answers with 'Kind regards', do so as well, instead of 'Best'.`;
+};
+
+const getResponse = (lng) => {
+  return "// TODO";
+};
+
+const getTemplate = (lng) => {
+  return "// TODO";
+};
+
+const getSystemPrompt = (lng) =>
+  "You're helping me write a professional, formal Mail."; // TODO
+
+const getLanguage = (request) => {
   const languages = lngDetector.detect(request);
 
   for (const [lng, probability] of languages) {
     if (Object.keys(templates).includes(lng)) {
-      return templates[lng];
+      return lng;
     }
   }
 
-  throw new Error("No template found");
+  throw new Error("Language not supported.");
 };
 
 const buildPrompt = (request, points) => {
-  return `
-${getTemplate(request)}
-${request}
+  const lng = getLanguage(request);
 
-----
-
-[Punkte]
-${points}
-
-----
-
-`;
+  return [
+    { role: "system", content: getSystemPrompt(lng) },
+    // { role: "user", content: getTemplate(lng) },
+    // { role: "assistant", content: getResponse(lng) },
+    { role: "user", content: getPrompt(request, points) },
+  ];
 };
 
 const buildEmail = async (request, points) => {
-  const response = await openai.createCompletion("text-davinci-001", {
-    prompt: buildPrompt(request, points),
-    temperature: 1,
-    max_tokens: 500,
-    frequency_penalty: 0.15,
-    presence_penalty: 0.75,
+  const response = await openai.createChatCompletion({
+    model: "gpt-4",
+    messages: buildPrompt(request, points),
+    temperature: 0.5,
+    max_tokens: 2048,
+    frequency_penalty: 0,
+    presence_penalty: 0,
   });
 
-  return response.data.choices[0].text;
+  return response.choices[0].message.content;
 };
 
 function getElementByXpath(path) {
@@ -176,6 +195,7 @@ function logic() {
     const commitButton = createCommitButton();
 
     commitButton.addEventListener("click", async () => {
+      if (commitButton.innerText == "Generating...") return;
       commitButton.innerText = "Generating...";
 
       console.log("Generating email...");
