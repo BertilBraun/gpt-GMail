@@ -1,115 +1,54 @@
 const { Configuration, OpenAIApi } = require("openai");
 const lngDetector = new (require("languagedetect"))();
+const { config } = require("./config");
 
 const configuration = new Configuration({
-  apiKey: "YOUR_API_KEY",
+  apiKey: config.OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
 
-const templates = {
-  english: `
-###
+const supportedLanguages = ["en", "de"];
 
-Hi Bertil,
+const getPrompt = (lng, history, subject, recipient, content) => {
+  if (lng == "en")
+    return `Include references to the prior email exchange: 
+---
+${history}
+---
+Compose an email for me to ${recipient} about ${subject}. The email should cover these points: 
+---
+${content}
+---
+Refer back to our earlier conversations, and follow the recipient's style observed in our past discussions.`;
+  if (lng == "de")
+    return `Beziehen Sie sich auf den vorherigen E-Mail-Austausch: 
+---
+${history}
+---
+Verfassen Sie für mich eine E-Mail an ${recipient} über ${subject}. Die E-Mail sollte diese Punkte abdecken:
+---
+${content}
+---
+Beziehen Sie sich auf unsere früheren Unterhaltungen und folgen Sie dem Stil des Empfängers, wie er in unseren vorherigen Diskussionen beobachtet wurde.`;
 
-I have attached five samples of my original designs to this email. The sixth attachment is a list of designs where I collaborated with other designers including the location (URL) of the designs on the Internet.
-
-Thank you for allowing me to send samples to you. I will be pleased to participate in the forthcoming competition and also introduce my services to your team.
-
-Kindly notify me should you need any other information.
-
-Regards,
-George Washington
-
-----
-
-[Punkte]
-thanks
-occupied at the moment
-go ahead
-inform me when my attention is required
-
-----
-
-Hi George,
-
-I hope you've had a lovely week. Thank you for sending the details I requested promptly.
-
-Unfortunately, I'm occupied with some deadlines at the moment. However, I can review the document and return it before the end of the week. In the meantime, you can go ahead with the outline for the project.
-
-Please let me know if any new situations emerge that require my attention. It is an honour to be working on this project with you, and I hope to resume working with you soon.
-
-Regards,
-Bertil Braun
-
-### 
-`,
-  german: `
-###
-
-Hallo Bertil,
-
-Ich habe dieser E-Mail fünf Muster meiner Originaldesigns beigefügt. Der sechste Anhang ist eine Liste von Entwürfen, bei denen ich mit anderen Designern zusammengearbeitet habe, einschließlich des Standorts (URL) der Entwürfe im Internet.
-
-Vielen Dank für die Erlaubnis, Ihnen Muster zusenden zu dürfen. Ich würde mich freuen, an dem bevorstehenden Wettbewerb teilzunehmen und auch Ihrem Team meine Dienste vorzustellen.
-
-Bitte benachrichtigen Sie mich, wenn Sie weitere Informationen benötigen.
-
-Mit freundlichen Grüßen,
-George Washington
-
-----
-
-[Punkte]
-danke
-im Moment besetzt
-machen Sie weiter
-informieren Sie mich, wenn meine Aufmerksamkeit erforderlich ist
-
-----
-
-Hallo George,
-
-ich hoffe, du hattest eine schöne Woche. Vielen Dank für die prompte Zusendung der von mir angeforderten Informationen.
-
-Leider bin ich im Moment mit einigen Terminen beschäftigt. Ich kann das Dokument jedoch überprüfen und vor Ende der Woche zurückschicken. In der Zwischenzeit können Sie mit dem Entwurf für das Projekt fortfahren.
-
-Bitte lassen Sie mich wissen, wenn sich neue Situationen ergeben, die meine Aufmerksamkeit erfordern. Es ist mir eine Ehre, mit Ihnen an diesem Projekt zu arbeiten, und ich hoffe, die Zusammenarbeit mit Ihnen bald wieder aufnehmen zu können.
-
-Mit freundlichen Grüßen,
-Bertil Braun
-
-### 
-`,
+  throw new Error("Language not supported.");
 };
 
-const getPrompt = (request, points) => {
-  return `Write a professional, formal mail. The following is the conversation so far:
-  ${request}
+const getSystemPrompt = (lng, recipient, subject) => {
+  if (lng == "en")
+    return `You're an AI trained to draft professional emails. The user requires your assistance in writing an email to ${recipient} with a purpose: ${subject}.`;
 
+  if (lng == "de")
+    return `Sie sind eine KI, die darauf trainiert ist, professionelle E-Mails zu entwerfen. Der Benutzer benötigt Ihre Unterstützung beim Verfassen einer E-Mail an ${Empfänger} mit dem Zweck: ${Betreff}.`;
 
-  Now write a professional sounding formal response containing the following points:
-  ${points}
-  
-  Include a slight imitation of their habits. I.e. If partner answers with 'Kind regards', do so as well, instead of 'Best'.`;
+  throw new Error("Language not supported.");
 };
-
-const getResponse = (lng) => {
-  return "// TODO";
-};
-
-const getTemplate = (lng) => {
-  return "// TODO";
-};
-
-const getSystemPrompt = (lng) =>
-  "You're helping me write a professional, formal Mail."; // TODO
 
 const getLanguage = (request) => {
   const languages = lngDetector.detect(request);
 
   for (const [lng, probability] of languages) {
-    if (Object.keys(templates).includes(lng)) {
+    if (supportedLanguages.includes(lng)) {
       return lng;
     }
   }
@@ -117,21 +56,25 @@ const getLanguage = (request) => {
   throw new Error("Language not supported.");
 };
 
-const buildPrompt = (request, points) => {
-  const lng = getLanguage(request);
+const buildPrompt = (history, subject, recipient, content) => {
+  const lng = getLanguage(history + content);
 
   return [
-    { role: "system", content: getSystemPrompt(lng) },
-    // { role: "user", content: getTemplate(lng) },
-    // { role: "assistant", content: getResponse(lng) },
-    { role: "user", content: getPrompt(request, points) },
+    {
+      role: "system",
+      content: getSystemPrompt(lng, recipient, subject),
+    },
+    {
+      role: "user",
+      content: getPrompt(lng, history, subject, recipient, content),
+    },
   ];
 };
 
-const buildEmail = async (request, points) => {
+const buildEmail = async (history, subject, recipient, content) => {
   const response = await openai.createChatCompletion({
     model: "gpt-4",
-    messages: buildPrompt(request, points),
+    messages: buildPrompt(history, subject, recipient, content),
     temperature: 0.5,
     max_tokens: 2048,
     frequency_penalty: 0,
@@ -190,22 +133,24 @@ function logic() {
 
     const inputField = inputFields.item(0);
 
-    const existing = getElementByXpath("//*[text() = 'Gen Email']");
-    if (existing) existing.remove();
+    clearInterval(timer);
     const commitButton = createCommitButton();
 
     commitButton.addEventListener("click", async () => {
       if (commitButton.innerText == "Generating...") return;
       commitButton.innerText = "Generating...";
 
+      // TODO parse from UI
+      const history = ""; // TODO handle new mail differently
+      const subject = "";
+      const recipient = "";
+      const content = "";
+
       console.log("Generating email...");
-      console.log(buildPrompt(request.innerText, inputField.innerText));
+      console.log(buildPrompt(history, subject, recipient, content));
 
       try {
-        const response = await buildEmail(
-          request.innerText,
-          inputField.innerText
-        );
+        const response = await buildEmail(history, subject, recipient, content);
         console.log(response);
 
         inputField.innerHTML = response.replaceAll("\n", "<br>");
@@ -220,4 +165,4 @@ function logic() {
   }
 }
 
-setInterval(logic, 1000);
+const timer = setInterval(logic, 1000);
