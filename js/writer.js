@@ -97,8 +97,7 @@ const buildEmail = async (
   subject,
   recipient,
   content,
-  elementToSet,
-  then
+  elementToSet
 ) => {
   const url = "https://api.openai.com/v1/chat/completions";
 
@@ -238,20 +237,12 @@ function logic() {
       console.log(buildPrompt(history, subject, recipient, content));
 
       try {
-        await buildEmail(
-          history,
-          subject,
-          recipient,
-          content,
-          inputField,
-          () => {
-            commitButton.innerText = "Gen Mail";
-          }
-        );
+        await buildEmail(history, subject, recipient, content, inputField);
       } catch (error) {
         console.log(error);
         alert(error);
       }
+      commitButton.innerText = "Gen Mail";
     });
 
     toolBar.appendChild(commitButton);
