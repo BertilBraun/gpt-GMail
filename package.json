@@ -4,6 +4,6 @@
   },
   "dependencies": {
     "languagedetect": "^2.0.0",
-    "openai": "^2.0.2"
+    "openai": "^3.1.1"
   }
 }
