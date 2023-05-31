@@ -4,7 +4,10 @@
   "name": "gpt-GMail",
   "description": "Automatically generate Email Responses",
   "version": "1.0",
-  "permissions": ["https://mail.google.com/**"],
+  "browser_action": {
+    "default_popup": "js/popup.html"
+  },
+  "permissions": ["https://mail.google.com/**", "storage"],
   "content_scripts": [
     {
       "matches": ["https://mail.google.com/**"],

@@ -1,48 +1,67 @@
-const { Configuration, OpenAIApi } = require("openai");
 const lngDetector = new (require("languagedetect"))();
-const config = require("./config.json");
-
-const configuration = new Configuration({
-  apiKey: config.OPENAI_API_KEY,
-});
-const openai = new OpenAIApi(configuration);
 
 const EN = "english";
 const DE = "german";
 const supportedLanguages = [EN, DE];
 
-const getPrompt = (lng, history, subject, recipient, content) => {
+const getUserPrompt = (lng, history, subject, recipient, content, name) => {
+  if (history != "") {
+    return (
+      getHistoryPrompt(lng, history) +
+      getPrompt(lng, subject, recipient, content, name)
+    );
+  }
+
+  return getPrompt(lng, subject, recipient, content, name);
+};
+
+const getHistoryPrompt = (lng, history) => {
+  // if history is more than 4000 words, cut it down to 4000 words, keeping the first 4000 words
+  if (history.split(" ").length > 4000) {
+    history = history.split(" ").slice(0, 4000).join(" ");
+  }
+
   if (lng == EN)
     return `Include references to the prior email exchange: 
 ---
 ${history}
 ---
-Compose an email for me to ${recipient} about ${subject}. The email should cover these points: 
----
-${content}
----
-Refer back to our earlier conversations, and follow the recipient's style observed in our past discussions.`;
-
+Refer back to our earlier conversations, and follow the recipient's style observed in our past discussions.
+`;
   if (lng == DE)
-    return `Beziehen Sie sich auf den vorherigen E-Mail-Austausch: 
+    return `Beziehen Sie sich auf den vorherigen E-Mail-Austausch:
 ---
 ${history}
 ---
-Verfassen Sie für mich eine E-Mail an ${recipient} über ${subject}. Die E-Mail sollte diese Punkte abdecken:
+Verweisen Sie auf unsere früheren Unterhaltungen und folgen Sie dem Stil des Empfängers, wie er in unseren vorherigen Diskussionen beobachtet wurde.
+`;
+};
+
+const getPrompt = (lng, subject, recipient, content, name) => {
+  if (lng == EN)
+    return `Compose an email for me ${name} to ${recipient} about ${subject}. The email should cover these points: 
 ---
 ${content}
 ---
-Beziehen Sie sich auf unsere früheren Unterhaltungen und folgen Sie dem Stil des Empfängers, wie er in unseren vorherigen Diskussionen beobachtet wurde.`;
+Start with an improved version of the last subject. Write it as follows: "Subject: YOUR IMPROVED SUBJECT LINE\n". Start directly after that with the email content. Sign off with my name ${name}.`;
+
+  if (lng == DE)
+    return `Verfassen Sie für mich ${name} eine E-Mail an ${recipient} über ${subject}. Die E-Mail sollte diese Punkte abdecken:
+---
+${content}
+---
+
+Beginne mit einer verbesserten Version des letzten Betreffs. Schreibe diesen wie folgt: "Subject: YOUR IMPROVED SUBJECT LINE\n". Beginne direkt danach mit dem Inhalt der E-Mail. Unterschreibe mit meinem Namen ${name}.`;
 
   throw new Error("Language not supported.");
 };
 
 const getSystemPrompt = (lng, recipient, subject) => {
   if (lng == EN)
-    return `You're an AI trained to draft professional emails. The user requires your assistance in writing an email to ${recipient} with a purpose: ${subject}.`;
+    return `You're an AI trained to draft professional emails. I require your assistance in writing an email to ${recipient} with a purpose: ${subject}.`;
 
   if (lng == DE)
-    return `Sie sind eine KI, die darauf trainiert ist, professionelle E-Mails zu entwerfen. Der Benutzer benötigt Ihre Unterstützung beim Verfassen einer E-Mail an ${recipient} mit dem Zweck: ${subject}.`;
+    return `Sie sind eine KI, die darauf trainiert ist, professionelle E-Mails zu entwerfen. Ich benötige Ihre Unterstützung beim Verfassen einer E-Mail an ${recipient} mit dem Zweck: ${subject}.`;
 
   throw new Error("Language not supported.");
 };
@@ -59,7 +78,7 @@ const getLanguage = (request) => {
   throw new Error("Language not supported.");
 };
 
-const buildPrompt = (history, subject, recipient, content) => {
+const buildPrompt = (history, subject, recipient, content, name) => {
   const lng = getLanguage(history + content);
 
   return [
@@ -69,7 +88,7 @@ const buildPrompt = (history, subject, recipient, content) => {
     },
     {
       role: "user",
-      content: getPrompt(lng, history, subject, recipient, content),
+      content: getUserPrompt(lng, history, subject, recipient, content, name),
     },
   ];
 };
@@ -92,25 +111,46 @@ async function* streamAsyncIterator(stream) {
   }
 }
 
+function getFromStorage(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.get(key, function (result) {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve(result.apiKey);
+      }
+    });
+  });
+}
+
 const buildEmail = async (
   history,
   subject,
   recipient,
   content,
-  elementToSet
+  inputField,
+  subjectField
 ) => {
   const url = "https://api.openai.com/v1/chat/completions";
+  const apiKey = await getFromStorage("apiKey");
+  const name = await getFromStorage("name");
+
+  if (!apiKey) {
+    throw new Error(
+      "No API key found. Please set your API key in the extension options."
+    );
+  }
 
   // Make a POST request to the OpenAI API to get chat completions
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: "gpt-4",
-      messages: buildPrompt(history, subject, recipient, content),
+      messages: buildPrompt(history, subject, recipient, content, name ?? ""),
       temperature: 0.5,
       max_tokens: 2048,
       frequency_penalty: 0,
@@ -118,10 +158,13 @@ const buildEmail = async (
       stream: true,
     }),
   });
-  elementToSet.innerHTML = "";
+  inputField.innerHTML = "";
 
   // Create a TextDecoder to decode the response body stream
   const decoder = new TextDecoder();
+
+  var isFirstLine = true;
+  var lastLine = "";
 
   // Iterate through the chunks in the response body using for-await...of
   for await (const chunk of streamAsyncIterator(response.body)) {
@@ -146,7 +189,14 @@ const buildEmail = async (
       } = line;
 
       if (content) {
-        elementToSet.innerHTML += content.replaceAll("\n", "<br>");
+        lastLine += content;
+        if (isFirstLine) {
+          if (lastLine.includes("Subject:"))
+            subjectField.value = lastLine.split("Subject:")[1].trim();
+        } else {
+          inputField.innerHTML += content.replaceAll("\n", "<br>");
+        }
+        if (lastLine.includes("\n")) isFirstLine = false;
       }
     }
   }
@@ -234,10 +284,19 @@ function logic() {
       });
 
       console.log("Generating email...");
-      console.log(buildPrompt(history, subject, recipient, content));
+      console.log(
+        buildPrompt(history, subject, recipient, content, "TestName")
+      );
 
       try {
-        await buildEmail(history, subject, recipient, content, inputField);
+        await buildEmail(
+          history,
+          subject,
+          recipient,
+          content,
+          inputField,
+          subjectElement
+        );
       } catch (error) {
         console.log(error);
         alert(error);
