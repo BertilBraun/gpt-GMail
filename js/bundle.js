@@ -5,6 +5,10 @@ const EN = "english";
 const DE = "german";
 const supportedLanguages = [EN, DE];
 
+const TONE_FORMAL = "formal";
+const TONE_INFORMAL = "informal";
+const supportedTones = [TONE_FORMAL, TONE_INFORMAL];
+
 const getUserPrompt = (lng, history, subject, recipient, content, name) => {
   if (history != "") {
     return (
@@ -40,29 +44,33 @@ Verweisen Sie auf unsere früheren Unterhaltungen und folgen Sie dem Stil des Em
 
 const getPrompt = (lng, subject, recipient, content, name) => {
   if (lng == EN)
-    return `Compose an email for me ${name} to ${recipient} about ${subject}. The email should cover these points: 
+    return `Compose an email for me "${name}" to ${recipient} about ${subject}. The email should cover these points: 
 ---
 ${content}
 ---
-Start with an improved version of the last subject. Write it as follows: "Subject: YOUR IMPROVED SUBJECT LINE\n". Start directly after that with the email content. Sign off with my name ${name}.`;
+Start with an improved version of the last subject. Write it as follows: "Subject: YOUR IMPROVED SUBJECT LINE\n". Start directly after that with the email content. Sign off with my name "${name}".`;
 
   if (lng == DE)
-    return `Verfassen Sie für mich ${name} eine E-Mail an ${recipient} über ${subject}. Die E-Mail sollte diese Punkte abdecken:
+    return `Verfassen Sie für mich "${name}" eine E-Mail an ${recipient} über ${subject}. Die E-Mail sollte diese Punkte abdecken:
 ---
 ${content}
 ---
 
-Beginne mit einer verbesserten Version des letzten Betreffs. Schreibe diesen wie folgt: "Subject: YOUR IMPROVED SUBJECT LINE\n". Beginne direkt danach mit dem Inhalt der E-Mail. Unterschreibe mit meinem Namen ${name}.`;
+Beginne mit einer verbesserten Version des letzten Betreffs. Schreibe diesen wie folgt: "Subject: YOUR IMPROVED SUBJECT LINE\n". Beginne direkt danach mit dem Inhalt der E-Mail. Unterschreibe mit meinem Namen "${name}".`;
 
   throw new Error("Language not supported.");
 };
 
-const getSystemPrompt = (lng, recipient, subject) => {
-  if (lng == EN)
-    return `You're an AI trained to draft professional emails. I require your assistance in writing an email to ${recipient} with a purpose: ${subject}.`;
+const getSystemPrompt = (lng, tone, recipient, subject) => {
+  if (lng == EN) {
+    const toneString = tone == TONE_FORMAL ? "formal" : "casual";
+    return `You're an AI trained to draft ${toneString} emails. I require your assistance in writing an email to ${recipient} with a purpose: ${subject}.`;
+  }
 
-  if (lng == DE)
-    return `Sie sind eine KI, die darauf trainiert ist, professionelle E-Mails zu entwerfen. Ich benötige Ihre Unterstützung beim Verfassen einer E-Mail an ${recipient} mit dem Zweck: ${subject}.`;
+  if (lng == DE) {
+    const toneString = tone == TONE_FORMAL ? "formell" : "ungezwungen";
+    return `Sie sind eine KI, die darauf trainiert ist, ${toneString} E-Mails zu entwerfen. Ich benötige Ihre Unterstützung beim Verfassen einer E-Mail an ${recipient} mit dem Zweck: ${subject}.`;
+  }
 
   throw new Error("Language not supported.");
 };
@@ -79,13 +87,13 @@ const getLanguage = (request) => {
   throw new Error("Language not supported.");
 };
 
-const buildPrompt = (history, subject, recipient, content, name) => {
+const buildPrompt = (tone, history, subject, recipient, content, name) => {
   const lng = getLanguage(history + content);
 
   return [
     {
       role: "system",
-      content: getSystemPrompt(lng, recipient, subject),
+      content: getSystemPrompt(lng, tone, recipient, subject),
     },
     {
       role: "user",
@@ -118,13 +126,14 @@ function getFromStorage(key) {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
-        resolve(result.apiKey);
+        resolve(result[key]);
       }
     });
   });
 }
 
 const buildEmail = async (
+  tone,
   history,
   subject,
   recipient,
@@ -151,7 +160,14 @@ const buildEmail = async (
     },
     body: JSON.stringify({
       model: "gpt-4",
-      messages: buildPrompt(history, subject, recipient, content, name ?? ""),
+      messages: buildPrompt(
+        tone,
+        history,
+        subject,
+        recipient,
+        content,
+        name ?? "[Your Name]"
+      ),
       temperature: 0.5,
       max_tokens: 2048,
       frequency_penalty: 0,
@@ -222,14 +238,43 @@ function createCommitButton() {
   commitButton.style.border = "none";
   commitButton.style.borderRadius = "5px";
   commitButton.style.padding = "10px";
-  commitButton.style.margin = "10px";
-  commitButton.style.fontSize = "16px";
+  commitButton.style.margin = "2px";
+  commitButton.style.fontSize = "14px";
   commitButton.style.zIndex = "9999";
   commitButton.style.borderRadius = "5px";
   commitButton.style.textAlign = "center";
   commitButton.style.fontFamily = "Roboto, sans-serif";
 
   return commitButton;
+}
+
+function createToneDropdown() {
+  // Tones are [professional/formal, casual/informal]
+  const toneDropdown = document.createElement("select");
+
+  toneDropdown.style.backgroundColor = "#00bcd4";
+  toneDropdown.style.color = "#fff";
+  toneDropdown.style.border = "none";
+  toneDropdown.style.borderRadius = "5px";
+  toneDropdown.style.padding = "10px";
+  toneDropdown.style.margin = "2px";
+  toneDropdown.style.fontSize = "12px";
+  toneDropdown.style.zIndex = "9999";
+  toneDropdown.style.borderRadius = "5px";
+  toneDropdown.style.textAlign = "center";
+  toneDropdown.style.fontFamily = "Roboto, sans-serif";
+
+  for (const tone of supportedTones) {
+    const option = document.createElement("option");
+    option.value = tone;
+    option.innerText = tone.charAt(0).toUpperCase() + tone.slice(1);
+    toneDropdown.appendChild(option);
+  }
+
+  // Set default value to formal
+  toneDropdown.value = TONE_FORMAL;
+
+  return toneDropdown;
 }
 
 function makeHTMLToText(html) {
@@ -256,6 +301,7 @@ function logic() {
 
     console.log("Adding button...");
     const commitButton = createCommitButton();
+    const toneDropdown = createToneDropdown();
 
     commitButton.addEventListener("click", async () => {
       if (commitButton.innerText == "Generating...") return;
@@ -277,20 +323,26 @@ function logic() {
       ); // TODO: issue, if a chat is in the background, this will be the chat history
       const history = makeHTMLToText(historyElement?.innerHTML ?? "");
 
+      const tone = toneDropdown.value;
+      const name = await getFromStorage("name");
+
       console.log({
         history,
         subject,
         recipient,
         content,
+        tone,
+        name,
       });
 
       console.log("Generating email...");
       console.log(
-        buildPrompt(history, subject, recipient, content, "TestName")
+        buildPrompt(tone, history, subject, recipient, content, name)
       );
 
       try {
         await buildEmail(
+          tone,
           history,
           subject,
           recipient,
@@ -305,6 +357,7 @@ function logic() {
       commitButton.innerText = "Gen Mail";
     });
 
+    toolBar.appendChild(toneDropdown);
     toolBar.appendChild(commitButton);
   }
 }

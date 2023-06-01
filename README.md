@@ -23,3 +23,4 @@ Package via `browserify writer.js > bundle.js` or the included `npm run package`
 - [x] Use different Templates when there was no request.
 - [x] Calculate how long the response may be, to not exceed the Token limit.
 - [x] Automatically set the improved subject line.
+- [x] Add Formal / Informal option.
